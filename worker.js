@@ -101,9 +101,11 @@ const TEXT_POLISH_PROMPT = `# Role
 async function transcribeAudio(audioFile, apiKey) {
 	const formData = new FormData();
 	formData.append('file', audioFile);
-	formData.append('model', 'scribe_v2');
+	formData.append('model_id', 'scribe_v2');
+	formData.append('timestamps_granularity', 'none');
+	formData.append('tag_audio_events', 'false');
 
-	const response = await fetch('https://api.elevenlabs.io/v1/audio-native/scribe', {
+	const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
 		method: 'POST',
 		headers: {
 			'xi-api-key': apiKey,
