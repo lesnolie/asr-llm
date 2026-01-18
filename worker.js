@@ -375,7 +375,10 @@ export default {
 				headers: { 'Content-Type': 'application/json', ...getCorsHeaders() },
 			});
 		}
-
+		// ElevenLabs 连接测试
+  		if (url.pathname === '/test-elevenlabs') {
+      		return testElevenLabsConnections(env);
+  		}
 		// 404
 		return new Response(
 			JSON.stringify({ success: false, error: 'Not Found' }),
