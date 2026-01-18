@@ -96,30 +96,16 @@ const TEXT_POLISH_PROMPT = `# Role
 现在处理下面内容，只输出最终干净版本：`;
 
 /**
- * 调用 ElevenLabs Scribe v2 API
+ * 调用 Cloudflare Workers AI Whisper
  */
-async function transcribeAudio(audioFile, apiKey) {
-	const formData = new FormData();
-	formData.append('file', audioFile);
-	formData.append('model_id', 'scribe_v2');
-	formData.append('timestamps_granularity', 'none');
-	formData.append('tag_audio_events', 'false');
-
-	const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
-		method: 'POST',
-		headers: {
-			'xi-api-key': apiKey,
-		},
-		body: formData,
+async function transcribeAudio(audioFile, ai) {
+	// 使用 Cloudflare Workers AI Whisper Large v3 Turbo
+	const arrayBuffer = await audioFile.arrayBuffer();
+	const response = await ai.run('@cf/openai/whisper-large-v3-turbo', {
+		audio: [...new Uint8Array(arrayBuffer)],
 	});
 
-	if (!response.ok) {
-		const error = await response.text();
-		throw new Error(`ElevenLabs API error: ${response.status} - ${error}`);
-	}
-
-	const result = await response.json();
-	return result.text;
+	return response.text;
 }
 
 /**
@@ -146,128 +132,6 @@ function normalizeIntentOutput(text) {
 		.replace(/\s+/g, '')
 		.replace(/[*_`【】]/g, '')
 		.replace(/[.!?。！？]/g, '');
-}
-
-/**
- * 测试 ElevenLabs 各种连接方式
- */
-async function testElevenLabsConnections(env) {
-	const apiKey = env.ELEVENLABS_API_KEY;
-	const results = {};
-
-	// 测试 1: 获取模型列表（GET 请求）
-	try {
-		const response = await fetch('https://api.elevenlabs.io/v1/models', {
-			headers: { 'xi-api-key': apiKey }
-		});
-		results.test1_get_models = {
-			status: response.status,
-			ok: response.ok,
-			statusText: response.statusText,
-			data: response.ok ? await response.text() : await response.text()
-		};
-	} catch (error) {
-		results.test1_get_models = { error: error.message };
-	}
-
-	// 测试 2: Speech-to-Text HTTP 端点
-	try {
-		const testAudio = new Blob(['test'], { type: 'audio/wav' });
-		const formData = new FormData();
-		formData.append('file', testAudio, 'test.wav');
-		formData.append('model_id', 'scribe_v2');
-
-		const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
-			method: 'POST',
-			headers: { 'xi-api-key': apiKey },
-			body: formData
-		});
-		results.test2_http_stt = {
-			status: response.status,
-			ok: response.ok,
-			statusText: response.statusText,
-			data: await response.text()
-		};
-	} catch (error) {
-		results.test2_http_stt = { error: error.message };
-	}
-
-	// 测试 3: 检查 WebSocket 支持（不实际连接，只检查能力）
-	results.test3_websocket_support = {
-		available: typeof WebSocket !== 'undefined',
-		note: 'WebSocket constructor exists in Workers runtime'
-	};
-
-	// 测试 4: 用户信息端点
-	try {
-		const response = await fetch('https://api.elevenlabs.io/v1/user', {
-			headers: { 'xi-api-key': apiKey }
-		});
-		results.test4_user_info = {
-			status: response.status,
-			ok: response.ok,
-			statusText: response.statusText,
-			data: response.ok ? await response.text() : await response.text()
-		};
-	} catch (error) {
-		results.test4_user_info = { error: error.message };
-	}
-
-	// 测试 5: 不同的 speech-to-text 端点（旧版）
-	try {
-		const testAudio = new Blob(['test'], { type: 'audio/wav' });
-		const formData = new FormData();
-		formData.append('file', testAudio, 'test.wav');
-
-		const response = await fetch('https://api.elevenlabs.io/v1/audio-native/scribe', {
-			method: 'POST',
-			headers: { 'xi-api-key': apiKey },
-			body: formData
-		});
-		results.test5_old_endpoint = {
-			status: response.status,
-			ok: response.ok,
-			statusText: response.statusText,
-			data: await response.text()
-		};
-	} catch (error) {
-		results.test5_old_endpoint = { error: error.message };
-	}
-
-	// 测试 6: WebSocket 连接测试
-	try {
-		const wsUrl = `wss://api.elevenlabs.io/v1/speech-to-text?xi-api-key=${apiKey}`;
-		const ws = new WebSocket(wsUrl);
-
-		const wsResult = await new Promise((resolve, reject) => {
-			const timeout = setTimeout(() => {
-				ws.close();
-				reject(new Error('WebSocket connection timeout'));
-			}, 5000);
-
-			ws.addEventListener('open', () => {
-				clearTimeout(timeout);
-				ws.close();
-				resolve({ success: true, message: 'WebSocket connected successfully!' });
-			});
-
-			ws.addEventListener('error', (error) => {
-				clearTimeout(timeout);
-				reject(error);
-			});
-		});
-
-		results.test6_websocket_connection = wsResult;
-	} catch (error) {
-		results.test6_websocket_connection = {
-			success: false,
-			error: error.message || 'WebSocket connection failed'
-		};
-	}
-
-	return new Response(JSON.stringify(results, null, 2), {
-		headers: { 'Content-Type': 'application/json', ...getCorsHeaders() }
-	});
 }
 
 /**
@@ -320,7 +184,7 @@ async function processAudioRequest(request, env) {
 		}
 
 		// 3. 语音转文字
-		const transcribedText = await transcribeAudio(audioFile, env.ELEVENLABS_API_KEY);
+		const transcribedText = await transcribeAudio(audioFile, env.AI);
 
 		// 4. 意图判断
 		const intentPrompt = `${INTENT_DETECTION_PROMPT}
@@ -406,10 +270,7 @@ export default {
 				headers: { 'Content-Type': 'application/json', ...getCorsHeaders() },
 			});
 		}
-		// ElevenLabs 连接测试
-  		if (url.pathname === '/test-elevenlabs') {
-      		return testElevenLabsConnections(env);
-  		}
+
 		// 404
 		return new Response(
 			JSON.stringify({ success: false, error: 'Not Found' }),
