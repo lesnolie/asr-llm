@@ -96,13 +96,31 @@ const TEXT_POLISH_PROMPT = `# Role
 现在处理下面内容，只输出最终干净版本：`;
 
 /**
+ * 将 ArrayBuffer 转换为 base64
+ */
+function arrayBufferToBase64(buffer) {
+	let binary = '';
+	const bytes = new Uint8Array(buffer);
+	const chunkSize = 0x8000; // 32KB chunks to avoid call stack issues
+
+	for (let i = 0; i < bytes.length; i += chunkSize) {
+		const chunk = bytes.subarray(i, i + chunkSize);
+		binary += String.fromCharCode.apply(null, chunk);
+	}
+
+	return btoa(binary);
+}
+
+/**
  * 调用 Cloudflare Workers AI Whisper
  */
 async function transcribeAudio(audioFile, ai) {
 	// 使用 Cloudflare Workers AI Whisper Large v3 Turbo
-	const arrayBuffer = await audioFile.arrayBuffer();
+	const audioData = await audioFile.arrayBuffer();
+	const base64Audio = arrayBufferToBase64(audioData);
+
 	const response = await ai.run('@cf/openai/whisper-large-v3-turbo', {
-		audio: [...new Uint8Array(arrayBuffer)],
+		audio: base64Audio,
 	});
 
 	return response.text;
