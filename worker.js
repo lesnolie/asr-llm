@@ -149,6 +149,97 @@ function normalizeIntentOutput(text) {
 }
 
 /**
+ * 测试 ElevenLabs 各种连接方式
+ */
+async function testElevenLabsConnections(env) {
+	const apiKey = env.ELEVENLABS_API_KEY;
+	const results = {};
+
+	// 测试 1: 获取模型列表（GET 请求）
+	try {
+		const response = await fetch('https://api.elevenlabs.io/v1/models', {
+			headers: { 'xi-api-key': apiKey }
+		});
+		results.test1_get_models = {
+			status: response.status,
+			ok: response.ok,
+			statusText: response.statusText,
+			data: response.ok ? await response.text() : await response.text()
+		};
+	} catch (error) {
+		results.test1_get_models = { error: error.message };
+	}
+
+	// 测试 2: Speech-to-Text HTTP 端点
+	try {
+		const testAudio = new Blob(['test'], { type: 'audio/wav' });
+		const formData = new FormData();
+		formData.append('file', testAudio, 'test.wav');
+		formData.append('model_id', 'scribe_v2');
+
+		const response = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+			method: 'POST',
+			headers: { 'xi-api-key': apiKey },
+			body: formData
+		});
+		results.test2_http_stt = {
+			status: response.status,
+			ok: response.ok,
+			statusText: response.statusText,
+			data: await response.text()
+		};
+	} catch (error) {
+		results.test2_http_stt = { error: error.message };
+	}
+
+	// 测试 3: 检查 WebSocket 支持（不实际连接，只检查能力）
+	results.test3_websocket_support = {
+		available: typeof WebSocket !== 'undefined',
+		note: 'WebSocket constructor exists in Workers runtime'
+	};
+
+	// 测试 4: 用户信息端点
+	try {
+		const response = await fetch('https://api.elevenlabs.io/v1/user', {
+			headers: { 'xi-api-key': apiKey }
+		});
+		results.test4_user_info = {
+			status: response.status,
+			ok: response.ok,
+			statusText: response.statusText,
+			data: response.ok ? await response.text() : await response.text()
+		};
+	} catch (error) {
+		results.test4_user_info = { error: error.message };
+	}
+
+	// 测试 5: 不同的 speech-to-text 端点（旧版）
+	try {
+		const testAudio = new Blob(['test'], { type: 'audio/wav' });
+		const formData = new FormData();
+		formData.append('file', testAudio, 'test.wav');
+
+		const response = await fetch('https://api.elevenlabs.io/v1/audio-native/scribe', {
+			method: 'POST',
+			headers: { 'xi-api-key': apiKey },
+			body: formData
+		});
+		results.test5_old_endpoint = {
+			status: response.status,
+			ok: response.ok,
+			statusText: response.statusText,
+			data: await response.text()
+		};
+	} catch (error) {
+		results.test5_old_endpoint = { error: error.message };
+	}
+
+	return new Response(JSON.stringify(results, null, 2), {
+		headers: { 'Content-Type': 'application/json', ...getCorsHeaders() }
+	});
+}
+
+/**
  * CORS 响应头
  */
 function getCorsHeaders() {
