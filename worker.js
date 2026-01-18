@@ -234,6 +234,37 @@ async function testElevenLabsConnections(env) {
 		results.test5_old_endpoint = { error: error.message };
 	}
 
+	// 测试 6: WebSocket 连接测试
+	try {
+		const wsUrl = `wss://api.elevenlabs.io/v1/speech-to-text?xi-api-key=${apiKey}`;
+		const ws = new WebSocket(wsUrl);
+
+		const wsResult = await new Promise((resolve, reject) => {
+			const timeout = setTimeout(() => {
+				ws.close();
+				reject(new Error('WebSocket connection timeout'));
+			}, 5000);
+
+			ws.addEventListener('open', () => {
+				clearTimeout(timeout);
+				ws.close();
+				resolve({ success: true, message: 'WebSocket connected successfully!' });
+			});
+
+			ws.addEventListener('error', (error) => {
+				clearTimeout(timeout);
+				reject(error);
+			});
+		});
+
+		results.test6_websocket_connection = wsResult;
+	} catch (error) {
+		results.test6_websocket_connection = {
+			success: false,
+			error: error.message || 'WebSocket connection failed'
+		};
+	}
+
 	return new Response(JSON.stringify(results, null, 2), {
 		headers: { 'Content-Type': 'application/json', ...getCorsHeaders() }
 	});
